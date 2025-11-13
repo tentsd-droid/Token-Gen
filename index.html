@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delek Hospital OPD Token</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the mobile-first design */
+        .font-inter { font-family: 'Inter', sans-serif; }
+        
+        /* Print styles for thermal receipt */
+        @media print {
+            body { 
+                font-family: monospace, sans-serif; /* Monospace is good for receipts */
+                margin: 0; 
+                padding: 0; 
+            }
+            .receipt {
+                width: 58mm; /* Common thermal printer width */
+                padding: 10px;
+                text-align: center;
+            }
+            .logo { 
+                max-width: 60px; 
+                height: auto; 
+                margin: 5px auto 10px auto; 
+                display: block; 
+            }
+            h1 { 
+                font-size: 18px; 
+                font-weight: 700; 
+                margin: 5px 0; 
+                color: #000;
+            }
+            h2 { 
+                font-size: 14px; 
+                font-weight: 600; 
+                margin: 0 0 10px 0; 
+                color: #000;
+            }
+            p { 
+                font-size: 10px; 
+                margin: 2px 0; 
+                color: #000;
+            }
+            .token-label { 
+                font-size: 12px; 
+                font-weight: 600; 
+                margin-top: 10px;
+                color: #000;
+            }
+            /* Token number in bold as requested */
+            .token-number { 
+                font-size: 64px; 
+                font-weight: 900; 
+                line-height: 1; 
+                margin: 10px 0;
+                color: #000;
+            }
+            .footer { 
+                margin-top: 15px; 
+                border-top: 1px dashed #000; 
+                padding-top: 10px; 
+            }
+            .datetime { 
+                font-size: 10px; 
+            }
+        }
+        @page { size: 58mm auto; margin: 0; }
+    </style>
+</head>
+<body class="bg-gray-50 flex flex-col items-center p-4 font-inter min-h-screen">
+
+    <div id="app-container" class="w-full max-w-sm bg-white shadow-2xl rounded-xl p-6 md:p-8 mt-10 border border-gray-100">
+        
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-extrabold text-indigo-700 tracking-tight">
+                Delek Hospital OPD Token
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Local App (No internet required)
+            </p>
+        </header>
+
+        <!-- Current Token Display -->
+        <div class="text-center mb-8">
+            <p class="text-sm font-medium text-gray-600 uppercase">
+                Current Token Number
+            </p>
+            <div id="token-display-card" class="mt-2 p-6 rounded-lg shadow-inner bg-indigo-50">
+                <p id="token-number" class="text-7xl font-mono font-black text-indigo-900 leading-none">
+                    000
+                </p>
+            </div>
+        </div>
+        
+        <!-- Checkboxes for I and F -->
+        <div class="flex justify-around space-x-4 mb-8 p-4 bg-indigo-50 rounded-lg shadow-inner">
+            <div class="flex items-center">
+                <input id="check-i" type="checkbox" class="w-6 h-6 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500">
+                <label for="check-i" class="ml-2 text-lg font-medium text-gray-700">I (Optional)</label>
+            </div>
+            <div class="flex items-center">
+                <input id="check-f" type="checkbox" class="w-6 h-6 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500">
+                <label for="check-f" class="ml-2 text-lg font-medium text-gray-700">F (Optional)</label>
+            </div>
+        </div>
+
+        <!-- Action Button -->
+        <button 
+            id="generate-button"
+            class="w-full py-4 px-4 rounded-xl text-white font-bold text-lg shadow-lg transition duration-300 transform bg-green-600 hover:bg-green-700 active:scale-95 hover:shadow-xl"
+        >
+            Generate & Print Next Token
+        </button>
+        
+        <!-- Export Button -->
+        <button 
+            id="export-button"
+            class="w-full py-2 mt-4 px-4 rounded-xl text-indigo-700 font-bold text-base border-2 border-indigo-700 bg-white hover:bg-indigo-50 transition duration-300 transform"
+        >
+            Export Month's Data (CSV)
+        </button>
+
+        <!-- Status and Last Print Info -->
+        <div class="mt-6 text-center">
+            <p id="status-message" class="text-xs font-medium text-gray-500">App Loaded.</p>
+            <p id="last-printed-info" class="text-sm mt-2 text-green-600 font-semibold hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 inline-block mr-1">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.5H3.75v5.25A2.25 2.25 0 006 21h12a2.25 2.25 0 002.25-2.25v-5.25h-2.97m-1.21-1.35l-2.88-2.88c-.42-.42-1.1-.42-1.52 0l-2.88 2.88M12 21V6" />
+                </svg>
+                Last Printed: Token #<span id="last-printed-token">000</span>
+            </p>
+            <p id="reset-info" class="text-xs mt-1 text-red-500 font-medium hidden">
+                Counter reset for new day.
+            </p>
+        </div>
+    </div>
+    
+    <!-- JavaScript Logic -->
+    <script>
+        // DOM Elements
+        const tokenNumberEl = document.getElementById('token-number');
+        const generateButton = document.getElementById('generate-button');
+        const exportButton = document.getElementById('export-button');
+        const checkIEl = document.getElementById('check-i');
+        const checkFEl = document.getElementById('check-f');
+        const statusMessageEl = document.getElementById('status-message');
+        const lastPrintedInfoEl = document.getElementById('last-printed-info');
+        const lastPrintedTokenEl = document.getElementById('last-printed-token');
+        const resetInfoEl = document.getElementById('reset-info');
+
+        // Local Storage Keys
+        const TOKEN_KEY = 'delek_token_number';
+        const DATE_KEY = 'delek_last_reset_date';
+        const LAST_PRINTED_KEY = 'delek_last_printed';
+        const MONTHLY_RECORDS_KEY = 'delek_monthly_records';
+
+        let currentToken = 0;
+        let lastPrintedToken = 0;
+        let monthlyRecords = []; // Array of { id, i, f, timestamp } objects
+
+        /**
+         * Utility to format the token number with leading zeros.
+         * @param {number} num 
+         * @returns {string}
+         */
+        const formatToken = (num) => String(num).padStart(3, '0');
+
+        /**
+         * Gets today's date in a consistent 'YYYY-MM-DD' format.
+         * @returns {string}
+         */
+        const getTodayDateString = () => new Date().toISOString().split('T')[0];
+
+        /**
+         * Gets the current month and year string (YYYY-MM).
+         * @returns {string}
+         */
+        const getCurrentMonthYear = () => getTodayDateString().substring(0, 7);
+
+        /**
+         * Loads state from localStorage and performs the daily reset check.
+         */
+        const loadState = () => {
+            const storedToken = localStorage.getItem(TOKEN_KEY);
+            const storedDate = localStorage.getItem(DATE_KEY);
+            const storedLastPrinted = localStorage.getItem(LAST_PRINTED_KEY);
+            const storedRecords = localStorage.getItem(MONTHLY_RECORDS_KEY);
+            
+            const today = getTodayDateString();
+            let isReset = false;
+
+            if (storedDate !== today) {
+                // It's a new day, reset the token counter
+                currentToken = 0;
+                lastPrintedToken = 0;
+                localStorage.setItem(TOKEN_KEY, 0);
+                localStorage.setItem(LAST_PRINTED_KEY, 0);
+                localStorage.setItem(DATE_KEY, today);
+                isReset = true;
+                
+            } else {
+                // Same day, load existing state
+                currentToken = storedToken ? parseInt(storedToken) : 0;
+                lastPrintedToken = storedLastPrinted ? parseInt(storedLastPrinted) : 0;
+            }
+            
+            // Load monthly records (which persist across days)
+            try {
+                monthlyRecords = storedRecords ? JSON.parse(storedRecords) : [];
+            } catch (e) {
+                console.error("Error parsing monthly records, resetting.", e);
+                monthlyRecords = [];
+                localStorage.setItem(MONTHLY_RECORDS_KEY, JSON.stringify([]));
+            }
+
+
+            tokenNumberEl.textContent = formatToken(currentToken);
+            updateStatus(isReset);
+        };
+
+        /**
+         * Updates the UI status message and last printed info.
+         * @param {boolean} isReset - Whether a daily reset occurred.
+         */
+        const updateStatus = (isReset = false) => {
+            statusMessageEl.textContent = `Tracking for: ${getCurrentMonthYear()}. Tokens recorded this month: ${monthlyRecords.length}`;
+            resetInfoEl.classList.toggle('hidden', !isReset);
+
+            if (lastPrintedToken > 0) {
+                lastPrintedInfoEl.classList.remove('hidden');
+                lastPrintedTokenEl.textContent = formatToken(lastPrintedToken);
+            } else {
+                lastPrintedInfoEl.classList.add('hidden');
+            }
+        };
+
+        /**
+         * Saves the current token state to localStorage.
+         */
+        const saveTokenAndDate = (token) => {
+            currentToken = token;
+            localStorage.setItem(TOKEN_KEY, token);
+            localStorage.setItem(DATE_KEY, getTodayDateString());
+            tokenNumberEl.textContent = formatToken(currentToken);
+        };
+        
+        /**
+         * Handles the printing process.
+         * @param {number} token 
+         * @param {boolean} isI
+         * @param {boolean} isF
+         */
+        const handlePrint = (token, isI, isF) => {
+            if (token <= lastPrintedToken) return;
+
+            lastPrintedToken = token;
+            localStorage.setItem(LAST_PRINTED_KEY, token);
+            updateStatus();
+
+            const printWindow = window.open('', '_blank', 'height=400,width=600');
+            
+            // Build the print content string (using backticks for multiline)
+            const printContent = `
+                <style>
+                    @media print {
+                        body { font-family: monospace, sans-serif; margin: 0; padding: 0; }
+                        .receipt { width: 58mm; padding: 10px; text-align: center; }
+                        .logo { max-width: 60px; height: auto; margin: 5px auto 10px auto; display: block; }
+                        h1 { font-size: 18px; font-weight: 700; margin: 5px 0; color: #000; }
+                        h2 { font-size: 14px; font-weight: 600; margin: 0 0 10px 0; color: #000; }
+                        p { font-size: 10px; margin: 2px 0; color: #000; }
+                        .token-label { font-size: 12px; font-weight: 600; margin-top: 10px; color: #000; }
+                        .token-number { font-size: 64px; font-weight: 900; line-height: 1; margin: 10px 0; color: #000; }
+                        .checkbox-data { font-size: 12px; margin: 5px 0; font-weight: 700; }
+                        .footer { margin-top: 15px; border-top: 1px dashed #000; padding-top: 10px; }
+                        .datetime { font-size: 10px; }
+                    }
+                    @page { size: 58mm auto; margin: 0; }
+                </style>
+                <div class="receipt">
+                    <h1>Delek Hospital</h1>
+                    <img class="logo" src="https://firebasestorage.googleapis.com/v0/b/project-1082598377701.appspot.com/o/tibetan_delek_hospital_logo.png?alt=media&token=487d7b1b-e522-4416-8a7e-40076a06141a" onerror="this.src='https://placehold.co/60x60/f0f0f0/333333?text=LOGO';" alt="Tibetan Delek Hospital Logo"/>
+                    <h2>OPD Token</h2>
+                    
+                    <div class="token-label">TOKEN NUMBER</div>
+                    <div class="token-number">${formatToken(token)}</div>
+                    
+                    <div class="checkbox-data">
+                        I: ${isI ? 'YES' : 'NO'} | F: ${isF ? 'YES' : 'NO'}
+                    </div>
+
+                    <div class="footer">
+                        <p>Thank you for your visit.</p>
+                        <p class="datetime">${new Date().toLocaleString()}</p>
+                    </div>
+                </div>
+            `;
+
+            printWindow.document.write('<html><head><title>Token Receipt</title></head><body>');
+            printWindow.document.write(printContent);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            
+            // Set a short timeout to ensure the content loads before triggering print
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 250);
+        };
+        
+        /**
+         * Main click handler for generating a new token.
+         */
+        const generateToken = () => {
+            const isI = checkIEl.checked;
+            const isF = checkFEl.checked;
+            const newNumber = currentToken + 1;
+            const now = new Date();
+
+            // 1. Save daily state
+            saveTokenAndDate(newNumber);
+            
+            // 2. Save monthly record
+            const newRecord = { 
+                id: newNumber, 
+                i: isI, 
+                f: isF, 
+                date: getTodayDateString(), // YYYY-MM-DD
+                timestamp: now.toISOString()
+            };
+            monthlyRecords.push(newRecord);
+            localStorage.setItem(MONTHLY_RECORDS_KEY, JSON.stringify(monthlyRecords));
+            
+            // 3. Print
+            handlePrint(newNumber, isI, isF);
+
+            // 4. Update UI and reset checkboxes
+            statusMessageEl.textContent = `Token ${formatToken(newNumber)} generated and printed.`;
+            checkIEl.checked = false;
+            checkFEl.checked = false;
+            updateStatus();
+        };
+
+        /**
+         * Handles exporting monthly data as a CSV file.
+         */
+        const exportToCSV = () => {
+            if (monthlyRecords.length === 0) {
+                statusMessageEl.textContent = 'No records to export for this period.';
+                return;
+            }
+
+            const currentMonth = getCurrentMonthYear();
+            
+            // 1. Calculate Monthly Totals
+            const totals = monthlyRecords.reduce((acc, record) => {
+                acc.totalTokens++;
+                if (record.i) acc.totalI++;
+                if (record.f) acc.totalF++;
+                return acc;
+            }, { totalTokens: 0, totalI: 0, totalF: 0 });
+
+            // 2. Build Summary Header
+            let csvContent = `Delek Hospital Monthly Token Summary for ${currentMonth}\n`;
+            csvContent += `Total Tokens Issued:,${totals.totalTokens}\n`;
+            csvContent += `Total 'I' Tokens:,${totals.totalI}\n`;
+            csvContent += `Total 'F' Tokens:,${totals.totalF}\n\n`;
+
+            // 3. Build Detailed Records
+            const headers = ["Token ID", "Date (YYYY-MM-DD)", "Time (UTC)", "I Status (TRUE/FALSE)", "F Status (TRUE/FALSE)"];
+            csvContent += headers.join(",") + "\n";
+
+            monthlyRecords.forEach(record => {
+                const datePart = record.timestamp.split('T')[0];
+                const timePart = record.timestamp.split('T')[1].replace('Z', '');
+                
+                const row = [
+                    record.id,
+                    datePart,
+                    timePart,
+                    record.i ? "TRUE" : "FALSE",
+                    record.f ? "TRUE" : "FALSE"
+                ];
+                csvContent += row.join(",") + "\n";
+            });
+
+            // 4. Trigger download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (link.download !== undefined) { 
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", `Delek_Tokens_${currentMonth}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            
+            statusMessageEl.textContent = `Exported ${monthlyRecords.length} records to CSV.`;
+        };
+
+        // --- Event Listener and Initialization ---
+        
+        generateButton.addEventListener('click', generateToken);
+        exportButton.addEventListener('click', exportToCSV);
+        
+        // Load state and perform daily reset check when the app loads
+        window.onload = loadState;
+
+    </script>
+
+</body>
+</html>
